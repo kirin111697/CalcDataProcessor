@@ -1,6 +1,7 @@
 #include "feature.h"
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_blas.h>
+#include <gsl/gsl_fft_real.h>
 
 using namespace std;
 
@@ -113,6 +114,20 @@ float Feature::Kurt()
 
 float Feature::FFT(int order)
 {
+    fftResult = new double[size];
+    for(int i=0; i < size; i++)
+        fftResult[i] = vector[i];
+    //order???
+    gsl_fft_real_wavetable *wave;
+    gsl_fft_real_workspace *work;
+
+    wave = gsl_fft_real_wavetable_alloc(size);
+    work = gsl_fft_real_workspace_alloc(size);
+
+    gsl_fft_real_transform(fftResult, 1, size, wave, work);
+    
+    gsl_fft_real_wavetable_free(wave);
+    gsl_fft_real_workspace_free(work);
     return -999;
 
 }

@@ -31,6 +31,7 @@ class Feature
     private:
         double* vector;
         double* interval;
+        double* fftResult;
         int size;
 
 };
