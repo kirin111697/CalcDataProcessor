@@ -1,27 +1,29 @@
 #include "feature.h"
-#include <gsl/gsl_statistics.h>
-#include <gsl/gsl_blas.h>
-#include <gsl/gsl_fft_real.h>
 
 using namespace std;
 
+gsl_matrix *x;
+gsl_matrix *efp;
+gsl_matrix *ebp;
+gsl_matrix *front, *tmp, *tmp2, *ef, *ef2;
+
 Feature::Feature(double arr[], double time[], int num)
 {
-    vector = new double[num];
-    interval = new double[num-1];
+    vector = arr;
+    interval = time;
     size = num;
-    for(int i=0; i<size; i++)
-    {
-        vector[i] = arr[i];
-        if(i<size-1)
-            interval[i] = time[i];
-    }
+//    for(int i=0; i<size; i++)
+//    {
+//        vector[i] = arr[i];
+//        if(i<size-1)
+//            interval[i] = time[i];
+//    }
 }
 
 Feature::~Feature()
 {
-    free(vector);
-    free(interval);
+   // free(vector);
+   // free(interval);
 }
 
 float Feature::Mean()
@@ -125,11 +127,10 @@ float Feature::FFT(int order)
     work = gsl_fft_real_workspace_alloc(size);
 
     gsl_fft_real_transform(fftResult, 1, size, wave, work);
-    
+
     gsl_fft_real_wavetable_free(wave);
     gsl_fft_real_workspace_free(work);
-    return -999;
-
+    return 0;
 }
 
 float Feature::Entropy(int divide)
@@ -140,12 +141,13 @@ float Feature::Entropy(int divide)
     {
         gsl_vector_set(x, i, vector[i]);
     }
-    
+
     double max, min;
     gsl_vector_minmax(x, &min, &max);
     double slice = (max-min)/divide;
     double probInterval[divide] = {0};
-    for(int i=0; i<size; i++)
+
+	for(int i=0; i<size; i++)
     {
         for(int j=0; j<divide;j++)
         {
@@ -183,7 +185,7 @@ float Feature::Entropy(int divide)
 
         result += prob * log2(prob);
     }
-    
+
     return (float)-result;
 }
 
@@ -204,11 +206,10 @@ float Feature::AR(double order)
     // via Burg method
 
     int i, j;
-    gsl_matrix *x = gsl_matrix_calloc(size, 1);
-    gsl_matrix *efp = gsl_matrix_alloc(size-1, 1);
-    gsl_matrix *ebp = gsl_matrix_alloc(size-1, 1);
-    
-    // Initialization efp & ebp
+    x = gsl_matrix_calloc(size, 1);
+	efp = gsl_matrix_alloc(size-1, 1);
+	ebp = gsl_matrix_alloc(size-1, 1);
+	// Initialization efp & ebp
     for(i=0; i<size-1; i++)
     {
         gsl_matrix_set(x, i, 0, vector[i]);
@@ -223,15 +224,16 @@ float Feature::AR(double order)
     for(i=0; i<order; i++)
     {
         // Calculate the next order reflection (parcor) coefficient
-        gsl_matrix *front = gsl_matrix_alloc(ebp->size1, ebp->size2);
-        gsl_matrix_memcpy(front, ebp); 
+        front = gsl_matrix_alloc(ebp->size1, ebp->size2);
+        gsl_matrix_memcpy(front, ebp);
         gsl_matrix_scale(front, -2);
         double front_ans = 0;
-        for(j=0; j<size-1-i; j++)
+		int size1 = efp->size1;
+        for(j=0; j<size1/*j<size-1-i*/; j++)
             front_ans += gsl_matrix_get(front, j, 0) * gsl_matrix_get(efp, j, 0);
 
         double back_ans1 = 0, back_ans2 = 0;
-        for(j=0; j<size-1-i; j++)
+        for(j=0; j<size1/*j<size-1-i*/; j++)
         {
             back_ans1 += gsl_matrix_get(efp, j, 0) * gsl_matrix_get(efp, j, 0);
             back_ans2 += gsl_matrix_get(ebp, j, 0) * gsl_matrix_get(ebp, j, 0);
@@ -240,26 +242,26 @@ float Feature::AR(double order)
         double k = front_ans / (back_ans1 + back_ans2);
 
         // Update the forward and backward prediction errors
-        gsl_matrix *tmp = gsl_matrix_alloc(size-2-i, 1);
-        gsl_matrix *tmp2 = gsl_matrix_alloc(size-2-i, 1);
-        
-        gsl_matrix *ef, *ef2;
-        ef = gsl_matrix_alloc(size-2-i, 1);
-        ef2 = gsl_matrix_alloc(size-2-i, 1);
-        for(j=0; j<size-2-i; j++)
+        tmp = gsl_matrix_alloc(efp->size1-1, 1);
+        tmp2 = gsl_matrix_alloc(ebp->size1-1, 1);
+
+        ef = gsl_matrix_alloc(efp->size1-1, 1);
+        ef2 = gsl_matrix_alloc(ebp->size1-1, 1);
+		int size2 = ef->size1;
+        for(j=0; j<size2; j++)
         {
             gsl_matrix_set(ef, j, 0, gsl_matrix_get(efp, j+1, 0));
             gsl_matrix_set(ef2, j, 0, gsl_matrix_get(ebp, j+1, 0));
-        }        
+        }
         gsl_matrix_scale(ef2, k);
         gsl_matrix_add(ef, ef2);
         gsl_matrix_memcpy(tmp, ef);
         gsl_matrix_free(ef);
         gsl_matrix_free(ef2);
 
-        ef = gsl_matrix_alloc(size-2-i, 1);
-        ef2 = gsl_matrix_alloc(size-2-i, 1);
-        for(j=0; j<size-2-i; j++)
+        ef = gsl_matrix_alloc(efp->size1-1, 1);
+        ef2 = gsl_matrix_alloc(ebp->size1-1, 1);
+        for(j=0; j<size2; j++)
         {
             gsl_matrix_set(ef, j, 0, gsl_matrix_get(efp, j, 0));
             gsl_matrix_set(ef2, j, 0, gsl_matrix_get(ebp, j, 0));
@@ -283,29 +285,33 @@ float Feature::AR(double order)
         tmp = gsl_matrix_alloc(1, order+1);
         gsl_matrix_memcpy(tmp, a);
         gsl_matrix_scale(tmp, k);
-        gsl_matrix_free(tmp);
         for(j=0; j<=i; j++)
         {
             gsl_matrix_set(a, 0, j+1, gsl_matrix_get(a, 0, j+1) + gsl_matrix_get(tmp, 0, i-j));
         }
+        gsl_matrix_free(tmp);
 
     }
+	gsl_matrix_free(x);
+	gsl_matrix_free(efp);
+	gsl_matrix_free(ebp);
+	float ans = (float)gsl_matrix_get(a, 0, order);
+	gsl_matrix_free(a);
+    return ans;
 
-    return (float)gsl_matrix_get(a, 0, order);
 
-    
 }
 
 int main(int argc, char** argv)
 {
-    if(argc != 2)
+    if(/*argc != 2*/0)
     {
         cout << "Usage: ./feature <*.calcA>" << endl;
         exit(1);
     }
     else
     {
-        
+
         ifstream fin(argv[1]);
         if(!fin)
         {
@@ -314,14 +320,14 @@ int main(int argc, char** argv)
         }
         string path(argv[1]);
         path += "F";
-        ofstream fout(path);
+        ofstream fout(path.c_str());
         if(!fout)
         {
             cout << "Can't create file!" << endl;
             exit(1);
         }
         fout << "BONE\tTYPE\tFEATURE" << endl;
-        
+
         // Get data
         string line;
         int frame;
@@ -330,12 +336,12 @@ int main(int argc, char** argv)
         double interval[frame-1];
         for(int i=0; i<frame-1; i++)
             fin >> interval[i];
-
+		cout << "FINISH GET FREAM..." << endl;
         // Calculate feature
         double input[frame];
+		Feature f(input, interval, frame);
         for(int i=0; i<59*16; i++)
         {
-            cout << "DATA(943): " << i << endl;
             int boneIdx, floatIdx;
             fin >> boneIdx >> floatIdx;
             fout << boneIdx << " " << floatIdx << " ";
@@ -343,11 +349,13 @@ int main(int argc, char** argv)
             {
                 fin >> input[j];
             }
-            Feature f(input, interval, frame);
-            fout << f.Mean() << " " << f.Var() << " " << f.StdDev() << " " << f.Integ() << " "
+			cout << "FINISH GET " << i << "th data ..." << endl;
+
+			fout << f.Mean() << " " << f.Var() << " " << f.StdDev() << " " << f.Integ() << " "
                  << f.RMS() << " " << f.ZCR() << " " << f.MCR() << " " << f.Skew() << " "
-                 << f.Kurt() << " " << f.FFT(0) << " " << f.Entropy(frame/10) << " " << f.SMA() << " ";
-            for(int k=1; k<11; k++)
+                 << f.Kurt() << " " << f.FFT(0) << " " << f.Entropy(10) << " " << f.SMA() << " ";
+			int order = (frame < 10)? frame-1 : 10;
+            for(int k=1; k<order; k++)
                 fout << f.AR(k) << " ";
             fout << endl;
             fout.flush();

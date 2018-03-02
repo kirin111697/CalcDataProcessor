@@ -2,11 +2,15 @@
 #include<cmath>
 #include<string>
 #include<fstream>
+#include<gsl/gsl_statistics.h>
+#include<gsl/gsl_blas.h>
+#include <gsl/gsl_fft_real.h>
+
 class Feature
 {
     public:
-        
-        // Constructor: initaillize with data array and size 
+
+        // Constructor: initaillize with data array and size
         Feature(double arr[], double time[],int const num);
         ~Feature();
 
